@@ -226,13 +226,28 @@ export default function ApprovalCenter() {
                 const isAutoApproved = a.autoApproved;
                 const catBadge = getCategoryBadge(a);
                 const qrExpired = a.status === 'approved' && new Date(a.expiresAt).getTime() < Date.now();
+                const expiringSoon = !qrExpired && a.status === 'approved' &&
+                  new Date(a.expiresAt).getTime() - Date.now() < 60 * 60 * 1000;
+                const isCanceled = a.status === 'rejected' && a.rejectReason;
                 return (
                   <div
                     key={a.id}
-                    className="p-5 hover:bg-ink-50/60 transition-colors animate-fade-up cursor-pointer"
+                    className="p-5 hover:bg-ink-50/60 transition-colors animate-fade-up cursor-pointer relative overflow-hidden"
                     style={{ animationDelay: `${i * 40}ms` }}
                     onClick={() => setDetailAppt(a)}
                   >
+                    {(qrExpired || expiringSoon || isCanceled) && (
+                      <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold rounded-bl-xl flex items-center gap-1 ${
+                        qrExpired ? 'bg-ink-200 text-ink-700' :
+                        isCanceled ? 'bg-red-500 text-white' :
+                        'bg-warning-400 text-warning-900'
+                      }`}>
+                        {qrExpired ? <Clock className="w-3 h-3" /> :
+                         isCanceled ? <XCircle className="w-3 h-3" /> :
+                         <AlertTriangle className="w-3 h-3" />}
+                        {qrExpired ? '已过期' : isCanceled ? '已拒绝' : '即将过期'}
+                      </div>
+                    )}
                     <div className="flex items-start gap-4">
                       <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-100 to-accent-100 flex items-center justify-center flex-shrink-0">
                         <Users className="w-5 h-5 text-primary-700" />

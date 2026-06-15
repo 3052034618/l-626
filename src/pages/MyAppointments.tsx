@@ -4,7 +4,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
   Calendar, ChevronRight, Clock, Users, FileText, QrCode, User, Phone,
   AlertCircle, CheckCircle, XCircle, RefreshCcw, X, Zap, History, Building2,
-  ArrowRightLeft, Sparkles, Clock4
+  ArrowRightLeft, Sparkles, Clock4, AlertTriangle
 } from 'lucide-react';
 import type { Appointment, RescheduleHistoryItem, TransferHistoryItem, TimeSlot } from '@shared/types';
 import { api } from '../api';
@@ -85,13 +85,28 @@ export default function MyAppointments() {
           <div className="space-y-3">
             {list.map((a, i) => {
               const qrExpired = a.status === 'approved' && new Date(a.expiresAt).getTime() < Date.now();
+              const expiringSoon = !qrExpired && a.status === 'approved' &&
+                new Date(a.expiresAt).getTime() - Date.now() < 60 * 60 * 1000;
+              const isCanceled = a.status === 'rejected' && a.rejectReason;
               return (
                 <div
                   key={a.id}
                   onClick={() => setSelected(a)}
-                  className="bg-white rounded-2xl shadow-card hover:shadow-card-hover transition-all p-5 cursor-pointer group animate-fade-up"
+                  className="bg-white rounded-2xl shadow-card hover:shadow-card-hover transition-all p-5 cursor-pointer group animate-fade-up relative overflow-hidden"
                   style={{ animationDelay: `${i * 50}ms` }}
                 >
+                  {(qrExpired || expiringSoon || isCanceled) && (
+                    <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold rounded-bl-xl flex items-center gap-1 ${
+                      qrExpired ? 'bg-ink-200 text-ink-700' :
+                      isCanceled ? 'bg-red-500 text-white' :
+                      'bg-warning-400 text-warning-900'
+                    }`}>
+                      {qrExpired ? <Clock4 className="w-3 h-3" /> :
+                       isCanceled ? <XCircle className="w-3 h-3" /> :
+                       <AlertTriangle className="w-3 h-3" />}
+                      {qrExpired ? '已过期' : isCanceled ? '已取消' : '即将过期'}
+                    </div>
+                  )}
                   <div className="flex items-center gap-5">
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform ${
                       qrExpired ? 'bg-ink-100 opacity-60' : 'bg-gradient-to-br from-primary-100 to-accent-100'
@@ -112,6 +127,11 @@ export default function MyAppointments() {
                         {a.autoApproved && (
                           <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-100 text-accent-600 border border-accent-200 flex items-center gap-1">
                             <Zap className="w-3 h-3" />自动通过
+                          </span>
+                        )}
+                        {expiringSoon && (
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-warning-100 text-warning-700 border border-warning-200 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />即将过期
                           </span>
                         )}
                       </div>

@@ -50,6 +50,13 @@ export default function Verify() {
       });
       setLastRecord(record);
       setVerifiedAppt(updated);
+      setResult({
+        success: true,
+        action: action === 'check_in' ? 'check_out' : undefined,
+        appointment: updated,
+        message: action === 'check_in' ? '已完成入场登记，下次扫码可办理离场' : '已完成离场登记，本次预约结束',
+      });
+      setConfirmAction(null);
     } catch (e: any) {
       alert(e.message);
     }
@@ -72,21 +79,24 @@ export default function Verify() {
         } else if (r.action === 'check_out') {
           setConfirmAction('check_out');
         }
-      } else if (r.appointment) {
+      } else {
         const record = await api.createAccessRecord({
-          appointmentId: r.appointment.id,
-          visitorName: r.appointment.visitorName,
-          visitorPhone: r.appointment.visitorPhone,
+          appointmentId: r.appointment?.id,
+          visitorName: r.appointment?.visitorName,
+          visitorPhone: r.appointment?.visitorPhone,
           action: 'rejected',
           operatorId: user?.id,
           operatorName: user?.name,
-          appointmentStatusBefore: r.appointment.status,
-          appointmentStatusAfter: r.appointment.status,
+          appointmentStatusBefore: r.appointment?.status,
+          appointmentStatusAfter: r.appointment?.status,
           verifyResult: 'failed',
           rejectCategory: r.rejectCategory,
           remark: r.message,
         });
         setLastRecord(record);
+        if (r.appointment) {
+          setVerifiedAppt(r.appointment);
+        }
       }
     } finally {
       setScanning(false);
@@ -205,6 +215,8 @@ export default function Verify() {
                       <h3 className={`text-xl font-black ${result.success ? 'text-accent' : 'text-warning-300'}`}>
                         {confirmAction === 'check_in' ? '待入场登记' :
                          confirmAction === 'check_out' ? '待离场登记' :
+                         lastRecord?.action === 'check_in' ? '已完成入场' :
+                         lastRecord?.action === 'check_out' ? '已完成离场' :
                          result.success ? '核验通过' : '核验不通过'}
                       </h3>
                       <p className="text-sm text-white/70 mt-0.5">{result.message}</p>

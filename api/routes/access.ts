@@ -70,13 +70,13 @@ router.post('/', (req, res) => {
   const {
     appointmentId, visitorName, visitorPhone, action,
     operatorId, remark, appointmentStatusBefore, appointmentStatusAfter,
-    verifyResult, rejectCategory
+    verifyResult, rejectCategory, qrCode
   } = req.body;
   const record: AccessRecord = {
     id: 'r' + Math.random().toString(36).slice(2, 10),
-    appointmentId,
-    visitorName,
-    visitorPhone,
+    appointmentId: appointmentId || 'unknown',
+    visitorName: visitorName || '未知访客',
+    visitorPhone: visitorPhone || '',
     action,
     timestamp: new Date().toISOString(),
     operatorId: operatorId || 'u3',
