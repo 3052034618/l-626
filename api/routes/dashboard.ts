@@ -43,9 +43,17 @@ router.get('/stats', (_req, res) => {
 });
 
 router.get('/monthly', (req, res) => {
-  const { month } = req.query;
+  const { month, department, visitorName } = req.query;
   const targetMonth = month ? String(month) : '2026-06';
-  const monthAppts = store.appointments.filter(a => a.appointmentDate.startsWith(targetMonth));
+
+  let monthAppts = store.appointments.filter(a => a.appointmentDate.startsWith(targetMonth));
+
+  if (department) {
+    monthAppts = monthAppts.filter(a => a.visitedDepartment === department);
+  }
+  if (visitorName) {
+    monthAppts = monthAppts.filter(a => a.visitorName.includes(String(visitorName)));
+  }
 
   const totalAppointments = monthAppts.length;
   const totalVisited = monthAppts.filter(a => a.status === 'checked_in' || a.status === 'checked_out').length;

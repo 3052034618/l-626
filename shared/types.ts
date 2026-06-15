@@ -34,6 +34,8 @@ export interface Appointment {
   checkedInAt?: string;
   checkedOutAt?: string;
   rejectReason?: string;
+  autoApproved?: boolean;
+  transferFrom?: string;
 }
 
 export interface BlacklistItem {

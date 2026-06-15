@@ -8,7 +8,7 @@ import type {
   VerifyResult,
   MonthlyReportData,
   UserRole,
-} from '../../shared/types';
+} from '@shared/types';
 
 const base = '/api';
 
@@ -29,7 +29,13 @@ export const api = {
     req<User>('/auth/login', { method: 'POST', body: JSON.stringify({ phone, role }) }),
 
   getAppointments: (params?: Record<string, string | undefined>) => {
-    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+    const cleanParams: Record<string, string> = {};
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v) cleanParams[k] = v;
+      });
+    }
+    const qs = Object.keys(cleanParams).length ? '?' + new URLSearchParams(cleanParams).toString() : '';
     return req<Appointment[]>('/appointments' + qs);
   },
   getAppointment: (id: string) => req<Appointment>(`/appointments/${id}`),
@@ -39,6 +45,11 @@ export const api = {
     req<Appointment>(`/appointments/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, rejectReason }),
+    }),
+  transferAppointment: (id: string, targetEmployeeId: string, operatorId: string) =>
+    req<Appointment>(`/appointments/${id}/transfer`, {
+      method: 'PUT',
+      body: JSON.stringify({ targetEmployeeId, operatorId }),
     }),
   getTimeSlots: (date: string) => req<TimeSlot[]>(`/appointments/time-slots?date=${date}`),
 
@@ -50,7 +61,13 @@ export const api = {
   removeBlacklist: (id: string) => req<{ success: boolean }>(`/blacklist/${id}`, { method: 'DELETE' }),
 
   getAccessRecords: (params?: Record<string, string | undefined>) => {
-    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+    const cleanParams: Record<string, string> = {};
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v) cleanParams[k] = v;
+      });
+    }
+    const qs = Object.keys(cleanParams).length ? '?' + new URLSearchParams(cleanParams).toString() : '';
     return req<AccessRecord[]>('/access' + qs);
   },
   createAccessRecord: (data: Partial<AccessRecord>) =>
@@ -58,5 +75,12 @@ export const api = {
   verifyQr: (qrCode: string) => req<VerifyResult>(`/access/verify/${qrCode}`),
 
   getDashboardStats: () => req<DashboardStats>('/dashboard/stats'),
-  getMonthlyReport: (month: string) => req<MonthlyReportData>(`/dashboard/monthly?month=${month}`),
+  getMonthlyReport: (params: { month: string; department?: string; visitorName?: string }) => {
+    const cleanParams: Record<string, string> = {};
+    if (params.month) cleanParams.month = params.month;
+    if (params.department) cleanParams.department = params.department;
+    if (params.visitorName) cleanParams.visitorName = params.visitorName;
+    const qs = new URLSearchParams(cleanParams).toString();
+    return req<MonthlyReportData>(`/dashboard/monthly?${qs}`);
+  },
 };
