@@ -1,0 +1,98 @@
+import { Router } from 'express';
+import { store } from '../store';
+import type { Appointment, TimeSlot } from '../../shared/types';
+
+const router = Router();
+
+const genId = () => 'a' + Math.random().toString(36).slice(2, 10);
+const genQr = () => 'QR-VISITOR-' + Math.random().toString(36).slice(2, 10).toUpperCase();
+
+router.get('/', (req, res) => {
+  const { date, department, visitorName, status, phone, employeeId } = req.query;
+  let result = [...store.appointments];
+  if (date) result = result.filter(a => a.appointmentDate === date);
+  if (department) result = result.filter(a => a.visitedDepartment === department);
+  if (visitorName) result = result.filter(a => a.visitorName.includes(String(visitorName)));
+  if (status) result = result.filter(a => a.status === status);
+  if (phone) result = result.filter(a => a.visitorPhone === phone);
+  if (employeeId) result = result.filter(a => a.visitedEmployeeId === employeeId);
+  result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json(result);
+});
+
+router.get('/time-slots', (req, res) => {
+  const { date } = req.query;
+  const targetDate = date ? String(date) : new Date().toISOString().slice(0, 10);
+  const slots: TimeSlot[] = [];
+  for (let h = 9; h <= 17; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      if (h === 12 && m >= 0) continue;
+      if (h === 13) continue;
+      const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const count = store.appointments.filter(
+        a => a.appointmentDate === targetDate && a.appointmentTime === time && a.status !== 'rejected' && a.status !== 'expired'
+      ).length;
+      let density: 'low' | 'medium' | 'high' = 'low';
+      if (count >= 3) density = 'high';
+      else if (count >= 1) density = 'medium';
+      slots.push({ time, available: count < 5, density, count });
+    }
+  }
+  res.json(slots);
+});
+
+router.get('/:id', (req, res) => {
+  const appt = store.appointments.find(a => a.id === req.params.id);
+  if (!appt) return res.status(404).json({ error: '预约不存在' });
+  res.json(appt);
+});
+
+router.post('/', (req, res) => {
+  const { visitorName, visitorPhone, visitedEmployeeId, purpose, appointmentDate, appointmentTime } = req.body;
+  if (!visitorName || !visitorPhone || !visitedEmployeeId || !purpose || !appointmentDate || !appointmentTime) {
+    return res.status(400).json({ error: '请填写完整信息' });
+  }
+  const blacklisted = store.blacklist.find(b => b.visitorPhone === visitorPhone);
+  if (blacklisted) {
+    return res.status(403).json({ error: `您已被列入黑名单，原因：${blacklisted.reason}`, blacklisted: true });
+  }
+  const employee = store.users.find(u => u.id === visitedEmployeeId);
+  if (!employee) return res.status(400).json({ error: '被访员工不存在' });
+
+  const createdAt = new Date().toISOString();
+  const [h, m] = appointmentTime.split(':').map(Number);
+  const expiresAt = new Date(appointmentDate);
+  expiresAt.setHours(h, m + 15, 0, 0);
+
+  const appt: Appointment = {
+    id: genId(),
+    visitorName,
+    visitorPhone,
+    visitedEmployeeId,
+    visitedEmployeeName: employee.name,
+    visitedDepartment: employee.department || '未分配',
+    purpose,
+    appointmentDate,
+    appointmentTime,
+    status: 'pending',
+    qrCode: genQr(),
+    createdAt,
+    expiresAt: expiresAt.toISOString(),
+  };
+  store.appointments.unshift(appt);
+  res.status(201).json(appt);
+});
+
+router.put('/:id/status', (req, res) => {
+  const appt = store.appointments.find(a => a.id === req.params.id);
+  if (!appt) return res.status(404).json({ error: '预约不存在' });
+  const { status, rejectReason } = req.body;
+  appt.status = status;
+  if (status === 'approved') appt.approvedAt = new Date().toISOString();
+  if (status === 'rejected' && rejectReason) appt.rejectReason = rejectReason;
+  if (status === 'checked_in') appt.checkedInAt = new Date().toISOString();
+  if (status === 'checked_out') appt.checkedOutAt = new Date().toISOString();
+  res.json(appt);
+});
+
+export default router;

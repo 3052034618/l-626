@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap");
+
+:root {
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+@layer utilities {
+  .animate-stagger-1 { animation-delay: 50ms; }
+  .animate-stagger-2 { animation-delay: 100ms; }
+  .animate-stagger-3 { animation-delay: 150ms; }
+  .animate-stagger-4 { animation-delay: 200ms; }
+  .animate-stagger-5 { animation-delay: 250ms; }
+  .animate-stagger-6 { animation-delay: 300ms; }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.3);
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.5);
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(0, 212, 170, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 170, 0.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #00d4aa 0%, #2667a4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .glass-dark {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+}
