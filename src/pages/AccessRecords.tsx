@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Logs, ArrowDownCircle, ArrowUpCircle, XCircle, Calendar, Search, Filter,
-  Building2, Download
+  Building2, Download, CheckCircle, AlertOctagon, User
 } from 'lucide-react';
 import type { AccessRecord } from '@shared/types';
 import { api } from '../api';
@@ -11,6 +11,15 @@ const actionConfig = {
   check_in: { label: '入场', icon: ArrowDownCircle, cls: 'bg-accent-100 text-accent-600 border-accent-200' },
   check_out: { label: '离场', icon: ArrowUpCircle, cls: 'bg-primary-100 text-primary-700 border-primary-200' },
   rejected: { label: '拒绝', icon: XCircle, cls: 'bg-red-100 text-red-600 border-red-200' },
+};
+
+const rejectCategoryLabels: Record<string, string> = {
+  blacklist: '黑名单',
+  pending: '待审批',
+  rejected: '已拒绝',
+  expired: '二维码过期',
+  checked_out: '已离场',
+  other: '其他原因',
 };
 
 const departments = ['全部', '技术部', '市场部', '人力资源部', '行政部', '安保部'];
@@ -23,7 +32,9 @@ export default function AccessRecords() {
   const [date, setDate] = useState('');
   const [department, setDepartment] = useState('');
   const [remark, setRemark] = useState('');
+  const [rejectCategory, setRejectCategory] = useState('');
   const [rejectReasons, setRejectReasons] = useState<string[]>([]);
+  const [rejectCategories, setRejectCategories] = useState<string[]>([]);
 
   const load = async () => {
     setLoading(true);
@@ -33,16 +44,19 @@ export default function AccessRecords() {
       if (date) params.date = date;
       if (department) params.department = department;
       if (remark) params.remark = remark;
+      if (rejectCategory) params.rejectCategory = rejectCategory;
       const data = await api.getAccessRecords(params);
       setList(data);
       const reasons = await api.getRejectReasons();
       setRejectReasons(reasons);
+      const cats = await api.getRejectCategories();
+      setRejectCategories(cats);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [filter, date, department, remark]);
+  useEffect(() => { load(); }, [filter, date, department, remark, rejectCategory]);
 
   const filtered = list.filter((r) =>
     !search || r.visitorName.includes(search) || r.visitorPhone.includes(search)
@@ -57,10 +71,12 @@ export default function AccessRecords() {
 
   const exportCsv = () => {
     let csv = '出入记录\n';
-    csv += '访客姓名,联系电话,操作,操作时间,操作人,备注\n';
+    csv += '访客姓名,联系电话,操作,核验结果,失败分类,操作人,操作时间,备注\n';
     filtered.forEach((r) => {
       const act = actionConfig[r.action]?.label || r.action;
-      csv += `${r.visitorName},${r.visitorPhone},${act},${formatDateTime(r.timestamp)},${r.operatorId},"${r.remark || ''}"\n`;
+      const success = r.verifyResult === 'success' || !r.verifyResult && r.action !== 'rejected';
+      const cat = r.rejectCategory ? (rejectCategoryLabels[r.rejectCategory] || r.rejectCategory) : '';
+      csv += `${r.visitorName},${r.visitorPhone},${act},${success ? '成功' : '失败'},${cat},${r.operatorName || r.operatorId || ''},${formatDateTime(r.timestamp)},"${r.remark || ''}"\n`;
     });
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -108,7 +124,7 @@ export default function AccessRecords() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-3 px-4 py-3 bg-ink-50/60 border-b border-ink-100">
+          <div className="grid md:grid-cols-5 gap-3 px-4 py-3 bg-ink-50/60 border-b border-ink-100">
             <div className="relative">
               <Search className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -140,6 +156,19 @@ export default function AccessRecords() {
               </select>
             </div>
             <div className="relative">
+              <AlertOctagon className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <select
+                value={rejectCategory}
+                onChange={(e) => setRejectCategory(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-ink-200 bg-white text-sm focus:border-primary-400 outline-none appearance-none"
+              >
+                <option value="">全部失败分类</option>
+                {rejectCategories.map((c) => (
+                  <option key={c} value={c}>{rejectCategoryLabels[c] || c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="relative">
               <Filter className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <select
                 value={remark}
@@ -160,6 +189,9 @@ export default function AccessRecords() {
                 <tr>
                   <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">访客信息</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">操作</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">核验结果</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">失败分类</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">操作人</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">时间</th>
                   <th className="px-5 py-3.5 text-left text-xs font-bold text-ink-500 uppercase tracking-wider">备注</th>
                 </tr>
@@ -167,14 +199,15 @@ export default function AccessRecords() {
               <tbody className="divide-y divide-ink-100">
                 {loading ? (
                   [1, 2, 3, 4].map((i) => (
-                    <tr key={i}><td colSpan={4} className="px-5 py-5"><div className="h-5 animate-pulse bg-ink-100 rounded" /></td></tr>
+                    <tr key={i}><td colSpan={7} className="px-5 py-5"><div className="h-5 animate-pulse bg-ink-100 rounded" /></td></tr>
                   ))
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={4} className="px-5 py-16 text-center text-ink-400">暂无记录</td></tr>
+                  <tr><td colSpan={7} className="px-5 py-16 text-center text-ink-400">暂无记录</td></tr>
                 ) : (
                   filtered.map((r, i) => {
                     const cfg = actionConfig[r.action];
                     const Icon = cfg.icon;
+                    const success = r.verifyResult === 'success' || !r.verifyResult && r.action !== 'rejected';
                     return (
                       <tr key={r.id} className="hover:bg-ink-50/60 transition-colors animate-fade-up" style={{ animationDelay: `${i * 40}ms` }}>
                         <td className="px-5 py-4">
@@ -186,6 +219,29 @@ export default function AccessRecords() {
                             <Icon className="w-3.5 h-3.5" />
                             {cfg.label}
                           </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                            success ? 'bg-accent-100 text-accent-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {success ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                            {success ? '成功' : '失败'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          {r.rejectCategory ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-warning-100 text-warning-700">
+                              {rejectCategoryLabels[r.rejectCategory] || r.rejectCategory}
+                            </span>
+                          ) : (
+                            <span className="text-ink-300">-</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-1.5 text-sm text-ink-600">
+                            <User className="w-3.5 h-3.5 text-ink-400" />
+                            {r.operatorName || r.operatorId || <span className="text-ink-300">-</span>}
+                          </div>
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-1.5 text-sm text-ink-600 font-mono">

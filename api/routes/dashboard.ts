@@ -17,6 +17,12 @@ const autoApproveIfNeeded = (appt: Appointment) => {
   return false;
 };
 
+const isQrExpired = (appt: Appointment): boolean => {
+  const now = Date.now();
+  const expires = new Date(appt.expiresAt).getTime();
+  return now > expires;
+};
+
 router.get('/stats', (_req, res) => {
   const today = '2026-06-15';
   store.appointments.forEach(autoApproveIfNeeded);
@@ -67,71 +73,90 @@ router.get('/monthly', (req, res) => {
 
   if (department) {
     monthAppts = monthAppts.filter(a => a.visitedDepartment === department);
-    const deptApptIds = monthAppts.map(a => a.id);
-    monthRecords = monthRecords.filter(r => deptApptIds.includes(r.appointmentId));
   }
   if (visitorName) {
     monthAppts = monthAppts.filter(a => a.visitorName.includes(String(visitorName)));
-    monthRecords = monthRecords.filter(r => r.visitorName.includes(String(visitorName)));
   }
   if (employeeId) {
     monthAppts = monthAppts.filter(a => a.visitedEmployeeId === employeeId);
   }
   if (rejectReason) {
-    monthRecords = monthRecords.filter(r => r.action === 'rejected' && r.remark && r.remark.includes(String(rejectReason)));
-    const rejectedApptIds = monthRecords.map(r => r.appointmentId);
-    monthAppts = monthAppts.filter(a => a.status === 'rejected' || rejectedApptIds.includes(a.id));
+    const byReject = new Set(
+      monthAppts
+        .filter(a => a.status === 'rejected' && a.rejectReason?.includes(String(rejectReason)))
+        .map(a => a.id)
+    );
+    monthRecords
+      .filter(r => r.action === 'rejected' && r.remark?.includes(String(rejectReason)))
+      .forEach(r => byReject.add(r.appointmentId));
+    monthAppts = monthAppts.filter(a => byReject.has(a.id));
   }
+
+  const apptIds = new Set(monthAppts.map(a => a.id));
+  monthRecords = monthRecords.filter(r => apptIds.has(r.appointmentId));
 
   const totalAppointments = monthAppts.length;
   const totalVisited = monthAppts.filter(a => a.status === 'checked_in' || a.status === 'checked_out').length;
   const totalRejected = monthAppts.filter(a => a.status === 'rejected').length;
+  const totalApproved = monthAppts.filter(a => a.status === 'approved' || a.status === 'checked_in' || a.status === 'checked_out').length;
   const totalAutoApproved = monthAppts.filter(a => a.autoApproved).length;
-  const totalExpired = monthAppts.filter(a => a.status === 'expired').length;
+  const totalQrExpired = monthAppts.filter(a =>
+    (a.status === 'approved') && isQrExpired(a)
+  ).length;
+  const totalExpired = monthAppts.filter(a => a.status === 'expired').length + totalQrExpired;
 
   const approved = monthAppts.filter(a => a.approvedAt && a.createdAt);
   const avgTime = approved.length > 0
     ? approved.reduce((s, a) => s + (new Date(a.approvedAt!).getTime() - new Date(a.createdAt).getTime()) / 3600000, 0) / approved.length
     : 0;
 
-  const deptStats = new Map<string, { count: number; visited: number; rejected: number }>();
+  const deptStats = new Map<string, { count: number; visited: number; rejected: number; approved: number; qrExpired: number }>();
   monthAppts.forEach(a => {
     const d = a.visitedDepartment;
-    if (!deptStats.has(d)) deptStats.set(d, { count: 0, visited: 0, rejected: 0 });
+    if (!deptStats.has(d)) deptStats.set(d, { count: 0, visited: 0, rejected: 0, approved: 0, qrExpired: 0 });
     const s = deptStats.get(d)!;
     s.count++;
     if (a.status === 'checked_in' || a.status === 'checked_out') s.visited++;
     if (a.status === 'rejected') s.rejected++;
+    if (a.status === 'approved' || a.status === 'checked_in' || a.status === 'checked_out') s.approved++;
+    if (a.status === 'approved' && isQrExpired(a)) s.qrExpired++;
   });
   const byDepartment = Array.from(deptStats.entries())
     .map(([department, s]) => ({ department, ...s }))
     .sort((a, b) => b.count - a.count);
 
-  const empStats = new Map<string, { employeeId: string; employeeName: string; department: string; count: number; visited: number; rejected: number }>();
+  const empStats = new Map<string, {
+    employeeId: string; employeeName: string; department: string;
+    count: number; visited: number; rejected: number; approved: number; qrExpired: number;
+  }>();
   monthAppts.forEach(a => {
     if (!empStats.has(a.visitedEmployeeId)) {
       empStats.set(a.visitedEmployeeId, {
         employeeId: a.visitedEmployeeId,
         employeeName: a.visitedEmployeeName,
         department: a.visitedDepartment,
-        count: 0, visited: 0, rejected: 0,
+        count: 0, visited: 0, rejected: 0, approved: 0, qrExpired: 0,
       });
     }
     const s = empStats.get(a.visitedEmployeeId)!;
     s.count++;
     if (a.status === 'checked_in' || a.status === 'checked_out') s.visited++;
     if (a.status === 'rejected') s.rejected++;
+    if (a.status === 'approved' || a.status === 'checked_in' || a.status === 'checked_out') s.approved++;
+    if (a.status === 'approved' && isQrExpired(a)) s.qrExpired++;
   });
   const byEmployee = Array.from(empStats.values()).sort((a, b) => b.count - a.count);
 
-  const dayStats = new Map<string, { count: number; visited: number; rejected: number }>();
+  const dayStats = new Map<string, { count: number; visited: number; rejected: number; approved: number; qrExpired: number }>();
   monthAppts.forEach(a => {
     const d = a.appointmentDate;
-    if (!dayStats.has(d)) dayStats.set(d, { count: 0, visited: 0, rejected: 0 });
+    if (!dayStats.has(d)) dayStats.set(d, { count: 0, visited: 0, rejected: 0, approved: 0, qrExpired: 0 });
     const s = dayStats.get(d)!;
     s.count++;
     if (a.status === 'checked_in' || a.status === 'checked_out') s.visited++;
     if (a.status === 'rejected') s.rejected++;
+    if (a.status === 'approved' || a.status === 'checked_in' || a.status === 'checked_out') s.approved++;
+    if (a.status === 'approved' && isQrExpired(a)) s.qrExpired++;
   });
   const byDay = Array.from(dayStats.entries())
     .map(([date, s]) => ({ date, ...s }))
@@ -155,11 +180,13 @@ router.get('/monthly', (req, res) => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  const data: MonthlyReportData = {
+  const data: MonthlyReportData & { totalApproved: number; totalQrExpired: number } = {
     totalAppointments,
     totalVisited,
     totalRejected,
+    totalApproved,
     totalAutoApproved,
+    totalQrExpired,
     totalExpired,
     averageApprovalTime: Math.round(avgTime * 10) / 10,
     byDepartment,

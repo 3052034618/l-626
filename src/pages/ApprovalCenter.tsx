@@ -225,6 +225,7 @@ export default function ApprovalCenter() {
               filtered.map((a, i) => {
                 const isAutoApproved = a.autoApproved;
                 const catBadge = getCategoryBadge(a);
+                const qrExpired = a.status === 'approved' && new Date(a.expiresAt).getTime() < Date.now();
                 return (
                   <div
                     key={a.id}
@@ -239,8 +240,11 @@ export default function ApprovalCenter() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2.5 mb-1 flex-wrap">
                           <h3 className="font-bold text-ink-800">{a.visitorName}</h3>
-                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${statusColors[a.status]}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                            qrExpired ? 'bg-ink-100 text-ink-600 border-ink-200' : statusColors[a.status]
+                          }`}>
                             {statusLabels[a.status]}
+                            {qrExpired && ' · 二维码已过期'}
                           </span>
                           {!isAdmin && (
                             <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${catBadge.cls}`}>
@@ -445,6 +449,8 @@ function ApprovalDetail({
     return { label: '部门共享', cls: 'bg-accent-100 text-accent-600 border-accent-200' };
   })();
 
+  const qrExpired = appt.status === 'approved' && new Date(appt.expiresAt).getTime() < Date.now();
+
   const timeOptions = slots.filter(s => s.available);
 
   return (
@@ -459,8 +465,11 @@ function ApprovalDetail({
             <div>
               <div className="flex items-center gap-2.5 mb-2 flex-wrap">
                 <h1 className="text-xl font-black text-ink-800">预约详情</h1>
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusColors[appt.status]}`}>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  qrExpired ? 'bg-ink-100 text-ink-600 border-ink-200' : statusColors[appt.status]
+                }`}>
                   {statusLabels[appt.status]}
+                  {qrExpired && ' · 二维码已过期'}
                 </span>
                 {catBadge && <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${catBadge.cls}`}>{catBadge.label}</span>}
                 {appt.autoApproved && (

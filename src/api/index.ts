@@ -78,6 +78,7 @@ export const api = {
     return req<AccessRecord[]>('/access' + qs);
   },
   getRejectReasons: () => req<string[]>('/access/reject-reasons'),
+  getRejectCategories: () => req<string[]>('/access/reject-categories'),
   createAccessRecord: (data: Partial<AccessRecord>) =>
     req<AccessRecord>('/access', { method: 'POST', body: JSON.stringify(data) }),
   verifyQr: (qrCode: string) => req<VerifyResult>(`/access/verify/${qrCode}`),

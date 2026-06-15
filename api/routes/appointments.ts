@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { store } from '../store';
-import type { Appointment, TimeSlot, AppointmentStatus, TransferHistoryItem, RescheduleHistoryItem } from '../../shared/types';
+import type { Appointment, TimeSlot, AppointmentStatus, TransferHistoryItem, RescheduleHistoryItem, QrCodeHistoryItem } from '../../shared/types';
 
 const router = Router();
 
 const genId = () => 'a' + Math.random().toString(36).slice(2, 10);
 const genQr = () => 'QR-VISITOR-' + Math.random().toString(36).slice(2, 10).toUpperCase();
-const genRecordId = () => (prefix: string) => prefix + Math.random().toString(36).slice(2, 10);
 
 const AUTO_APPROVE_HOURS = 24;
 
@@ -23,21 +22,15 @@ const autoApproveIfNeeded = (appt: Appointment): boolean => {
   return false;
 };
 
-const autoExpireIfNeeded = (appt: Appointment): boolean => {
-  if (appt.status === 'checked_in' || appt.status === 'checked_out' || appt.status === 'rejected') return false;
-  const expires = new Date(appt.expiresAt).getTime();
+const isQrExpired = (appt: Appointment): boolean => {
   const now = Date.now();
-  if (now > expires && appt.status !== 'expired') {
-    appt.status = 'expired';
-    return true;
-  }
-  return false;
+  const expires = new Date(appt.expiresAt).getTime();
+  return now > expires;
 };
 
 const processAppointments = (list: Appointment[]) => {
   list.forEach((a) => {
     autoApproveIfNeeded(a);
-    autoExpireIfNeeded(a);
   });
   return list;
 };
@@ -103,7 +96,6 @@ router.get('/:id', (req, res) => {
   const appt = store.appointments.find(a => a.id === req.params.id);
   if (!appt) return res.status(404).json({ error: '预约不存在' });
   autoApproveIfNeeded(appt);
-  autoExpireIfNeeded(appt);
   res.json(appt);
 });
 
@@ -124,6 +116,13 @@ router.post('/', (req, res) => {
   const expiresAt = new Date(appointmentDate);
   expiresAt.setHours(h, m + 15, 0, 0);
 
+  const qrCode = genQr();
+  const qrCodeHistory: QrCodeHistoryItem[] = [{
+    qrCode,
+    generatedAt: createdAt,
+    reason: 'create',
+  }];
+
   const appt: Appointment = {
     id: genId(),
     visitorName,
@@ -135,13 +134,14 @@ router.post('/', (req, res) => {
     appointmentDate,
     appointmentTime,
     status: 'pending',
-    qrCode: genQr(),
+    qrCode,
     createdAt,
     expiresAt: expiresAt.toISOString(),
     originalEmployeeId: employee.id,
     originalEmployeeName: employee.name,
     transferHistory: [],
     rescheduleHistory: [],
+    qrCodeHistory,
   };
   store.appointments.unshift(appt);
   res.status(201).json(appt);
@@ -158,6 +158,12 @@ router.put('/:id/status', (req, res) => {
   }
   if (newStatus === 'checked_out' && appt.status !== 'checked_in') {
     return res.status(400).json({ error: '访客尚未入场，无法执行离场操作' });
+  }
+  if (newStatus === 'checked_in' && appt.status !== 'approved') {
+    return res.status(400).json({ error: '预约未通过审批，无法入场' });
+  }
+  if (newStatus === 'checked_in' && isQrExpired(appt)) {
+    return res.status(400).json({ error: '预约二维码已过期，无法入场' });
   }
 
   appt.status = newStatus;
@@ -219,8 +225,8 @@ router.put('/:id/reschedule', (req, res) => {
   if (appt.status === 'checked_in' || appt.status === 'checked_out') {
     return res.status(400).json({ error: '访客已入场，无法改期' });
   }
-  if (appt.status === 'rejected' || appt.status === 'expired') {
-    return res.status(400).json({ error: '预约已被拒绝或已过期，无法改期' });
+  if (appt.status === 'rejected') {
+    return res.status(400).json({ error: '预约已被拒绝，无法改期' });
   }
 
   const { appointmentDate, appointmentTime, operatorId } = req.body;
@@ -240,13 +246,28 @@ router.put('/:id/reschedule', (req, res) => {
   if (!appt.rescheduleHistory) appt.rescheduleHistory = [];
   appt.rescheduleHistory.push(rescheduleRecord);
 
+  if (!appt.qrCodeHistory) appt.qrCodeHistory = [];
+  const oldQr = appt.qrCode;
+  appt.qrCodeHistory.push({
+    qrCode: oldQr,
+    generatedAt: appt.createdAt,
+    reason: 'reschedule',
+  });
+
+  const newQr = genQr();
+  appt.qrCode = newQr;
+  appt.qrCodeHistory.push({
+    qrCode: newQr,
+    generatedAt: new Date().toISOString(),
+    reason: 'reschedule',
+  });
+
   appt.appointmentDate = appointmentDate;
   appt.appointmentTime = appointmentTime;
   const [h, m] = appointmentTime.split(':').map(Number);
   const expiresAt = new Date(appointmentDate);
   expiresAt.setHours(h, m + 15, 0, 0);
   appt.expiresAt = expiresAt.toISOString();
-  appt.qrCode = genQr();
   appt.status = 'pending';
   appt.approvedAt = undefined;
   appt.autoApproved = false;
@@ -262,6 +283,9 @@ router.put('/:id/cancel', (req, res) => {
   if (!appt) return res.status(404).json({ error: '预约不存在' });
   if (appt.status === 'checked_in' || appt.status === 'checked_out') {
     return res.status(400).json({ error: '访客已入场，无法取消' });
+  }
+  if (appt.status === 'rejected') {
+    return res.status(400).json({ error: '预约已被拒绝，无需重复取消' });
   }
   appt.status = 'rejected';
   appt.rejectReason = '访客主动取消';

@@ -64,6 +64,7 @@ export interface Appointment {
   originalEmployeeId?: string;
   originalEmployeeName?: string;
   cancelledAt?: string;
+  qrCodeHistory?: QrCodeHistoryItem[];
 }
 
 export interface BlacklistItem {
@@ -75,6 +76,12 @@ export interface BlacklistItem {
   addedBy: string;
 }
 
+export interface QrCodeHistoryItem {
+  qrCode: string;
+  generatedAt: string;
+  reason: 'create' | 'reschedule' | 'reissue';
+}
+
 export interface AccessRecord {
   id: string;
   appointmentId: string;
@@ -83,6 +90,11 @@ export interface AccessRecord {
   action: 'check_in' | 'check_out' | 'rejected';
   timestamp: string;
   operatorId: string;
+  operatorName?: string;
+  appointmentStatusBefore?: AppointmentStatus;
+  appointmentStatusAfter?: AppointmentStatus;
+  verifyResult?: 'success' | 'failed';
+  rejectCategory?: 'blacklist' | 'pending' | 'rejected' | 'expired' | 'checked_out' | 'other';
   remark?: string;
 }
 
@@ -109,6 +121,8 @@ export interface VerifyResult {
   isBlacklisted?: boolean;
   isExpired?: boolean;
   action?: 'check_in' | 'check_out';
+  rejectCategory?: 'blacklist' | 'pending' | 'rejected' | 'expired' | 'checked_out' | 'other';
+  previewRecord?: AccessRecord;
 }
 
 export interface MonthlyReportData {
