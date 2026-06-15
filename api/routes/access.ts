@@ -1,12 +1,24 @@
 import { Router } from 'express';
 import { store } from '../store';
 import type { AccessRecord, VerifyResult } from '../../shared/types';
-import appointmentRoutes from './appointments.js';
 
 const router = Router();
 
+const AUTO_APPROVE_HOURS = 24;
+const autoApproveIfNeeded = (appt: any) => {
+  if (appt.status !== 'pending') return false;
+  const created = new Date(appt.createdAt).getTime();
+  if (Date.now() - created > AUTO_APPROVE_HOURS * 60 * 60 * 1000) {
+    appt.status = 'approved';
+    appt.approvedAt = new Date(created + AUTO_APPROVE_HOURS * 60 * 60 * 1000).toISOString();
+    appt.autoApproved = true;
+    return true;
+  }
+  return false;
+};
+
 router.get('/', (req, res) => {
-  const { date, action, department, visitorName } = req.query;
+  const { date, action, department, visitorName, remark } = req.query;
   let result = [...store.accessRecords];
   if (date) {
     result = result.filter(r => r.timestamp.slice(0, 10) === date);
@@ -21,8 +33,21 @@ router.get('/', (req, res) => {
   if (visitorName) {
     result = result.filter(r => r.visitorName.includes(String(visitorName)));
   }
+  if (remark) {
+    result = result.filter(r => r.remark && r.remark.includes(String(remark)));
+  }
   result.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   res.json(result);
+});
+
+router.get('/reject-reasons', (_req, res) => {
+  const reasons = new Set<string>();
+  store.accessRecords.forEach(r => {
+    if (r.action === 'rejected' && r.remark) {
+      reasons.add(r.remark);
+    }
+  });
+  res.json(Array.from(reasons));
 });
 
 router.post('/', (req, res) => {
@@ -44,27 +69,20 @@ router.post('/', (req, res) => {
 router.get('/verify/:qrCode', (req, res) => {
   const qr = req.params.qrCode;
   const appt = store.appointments.find(a => a.qrCode === qr);
-  const result: VerifyResult = { success: false, message: '' };
+  const result: VerifyResult & { action?: 'check_in' | 'check_out' } = { success: false, message: '' };
 
   if (!appt) {
     result.message = '二维码无效，未找到对应预约';
     return res.json(result);
   }
 
+  autoApproveIfNeeded(appt);
+
   const blacklisted = store.blacklist.find(b => b.visitorPhone === appt.visitorPhone);
   if (blacklisted) {
     result.isBlacklisted = true;
     result.appointment = appt;
     result.message = `访客已被列入黑名单：${blacklisted.reason}`;
-    return res.json(result);
-  }
-
-  const now = new Date();
-  const expires = new Date(appt.expiresAt);
-  if (now > expires) {
-    result.isExpired = true;
-    result.appointment = appt;
-    result.message = '预约已过期，请重新预约';
     return res.json(result);
   }
 
@@ -93,15 +111,26 @@ router.get('/verify/:qrCode', (req, res) => {
     return res.json(result);
   }
 
+  const now = new Date();
+  const expires = new Date(appt.expiresAt);
+
   if (appt.status === 'approved') {
+    if (now > expires) {
+      result.isExpired = true;
+      result.appointment = appt;
+      result.message = '预约已过期，请重新预约';
+      return res.json(result);
+    }
     result.success = true;
+    result.action = 'check_in';
     result.appointment = appt;
-    result.message = '核验通过';
+    result.message = '核验通过，可执行入场登记';
     return res.json(result);
   }
 
   if (appt.status === 'checked_in') {
     result.success = true;
+    result.action = 'check_out';
     result.appointment = appt;
     result.message = '访客已入场，可执行离场登记';
     return res.json(result);

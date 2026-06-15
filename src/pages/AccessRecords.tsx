@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Logs, ArrowDownCircle, ArrowUpCircle, XCircle, Calendar, Search, Filter } from 'lucide-react';
+import {
+  Logs, ArrowDownCircle, ArrowUpCircle, XCircle, Calendar, Search, Filter,
+  Building2, Download
+} from 'lucide-react';
 import type { AccessRecord } from '@shared/types';
 import { api } from '../api';
 import { formatDateTime } from '../utils';
@@ -10,24 +13,36 @@ const actionConfig = {
   rejected: { label: '拒绝', icon: XCircle, cls: 'bg-red-100 text-red-600 border-red-200' },
 };
 
+const departments = ['全部', '技术部', '市场部', '人力资源部', '行政部', '安保部'];
+
 export default function AccessRecords() {
   const [list, setList] = useState<AccessRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'check_in' | 'check_out' | 'rejected'>('all');
   const [search, setSearch] = useState('');
+  const [date, setDate] = useState('');
+  const [department, setDepartment] = useState('');
+  const [remark, setRemark] = useState('');
+  const [rejectReasons, setRejectReasons] = useState<string[]>([]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const params = filter !== 'all' ? { action: filter } : undefined;
+      const params: Record<string, string> = {};
+      if (filter !== 'all') params.action = filter;
+      if (date) params.date = date;
+      if (department) params.department = department;
+      if (remark) params.remark = remark;
       const data = await api.getAccessRecords(params);
       setList(data);
+      const reasons = await api.getRejectReasons();
+      setRejectReasons(reasons);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [filter]);
+  useEffect(() => { load(); }, [filter, date, department, remark]);
 
   const filtered = list.filter((r) =>
     !search || r.visitorName.includes(search) || r.visitorPhone.includes(search)
@@ -40,41 +55,102 @@ export default function AccessRecords() {
     rejected: list.filter((r) => r.action === 'rejected').length,
   };
 
+  const exportCsv = () => {
+    let csv = '出入记录\n';
+    csv += '访客姓名,联系电话,操作,操作时间,操作人,备注\n';
+    filtered.forEach((r) => {
+      const act = actionConfig[r.action]?.label || r.action;
+      csv += `${r.visitorName},${r.visitorPhone},${act},${formatDateTime(r.timestamp)},${r.operatorId},"${r.remark || ''}"\n`;
+    });
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `出入记录_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  };
+
   return (
     <div className="min-h-full bg-ink-50 p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-8 animate-fade-up">
-          <h1 className="text-2xl font-black text-ink-800 tracking-tight flex items-center gap-2.5">
-            <Logs className="w-6 h-6 text-primary-700" />
-            出入记录
-          </h1>
-          <p className="text-ink-500 mt-1 text-sm">所有访客的核验和通行记录</p>
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-8 animate-fade-up">
+          <div>
+            <h1 className="text-2xl font-black text-ink-800 tracking-tight flex items-center gap-2.5">
+              <Logs className="w-6 h-6 text-primary-700" />
+              出入记录
+            </h1>
+            <p className="text-ink-500 mt-1 text-sm">所有访客的核验和通行记录</p>
+          </div>
+          <button
+            onClick={exportCsv}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary-700 to-primary-600 text-white font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-1.5 text-sm"
+          >
+            <Download className="w-4 h-4" />导出
+          </button>
         </div>
 
         <div className="bg-white rounded-2xl shadow-card overflow-hidden animate-fade-up animate-stagger-1">
           <div className="flex items-center justify-between border-b border-ink-100 p-4 flex-wrap gap-3">
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {(['all', 'check_in', 'check_out', 'rejected'] as const).map((f) => {
                 const label = f === 'all' ? '全部' : actionConfig[f].label;
                 return (
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${filter === f ? 'bg-primary-700 text-white' : 'text-ink-500 hover:bg-ink-100'}`}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                      filter === f ? 'bg-primary-700 text-white' : 'text-ink-500 hover:bg-ink-100'
+                    }`}
                   >
                     {label} <span className={`ml-1 text-xs ${filter === f ? 'text-white/80' : 'text-ink-400'}`}>({counts[f]})</span>
                   </button>
                 );
               })}
             </div>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-3 px-4 py-3 bg-ink-50/60 border-b border-ink-100">
             <div className="relative">
               <Search className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="搜索访客姓名/电话"
-                className="pl-9 pr-4 py-2 rounded-lg border border-ink-200 bg-ink-50 text-sm focus:bg-white focus:border-primary-400 outline-none w-56"
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-ink-200 bg-white text-sm focus:border-primary-400 outline-none"
               />
+            </div>
+            <div className="relative">
+              <Calendar className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-ink-200 bg-white text-sm focus:border-primary-400 outline-none"
+              />
+            </div>
+            <div className="relative">
+              <Building2 className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-ink-200 bg-white text-sm focus:border-primary-400 outline-none appearance-none"
+              >
+                {departments.map((d) => (
+                  <option key={d} value={d === '全部' ? '' : d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            <div className="relative">
+              <Filter className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <select
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-ink-200 bg-white text-sm focus:border-primary-400 outline-none appearance-none"
+              >
+                <option value="">全部拒绝原因</option>
+                {rejectReasons.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -117,7 +193,9 @@ export default function AccessRecords() {
                             {formatDateTime(r.timestamp)}
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-sm text-ink-500">{r.remark || '-'}</td>
+                        <td className="px-5 py-4 text-sm text-ink-500 max-w-xs truncate">
+                          {r.remark || <span className="text-ink-300">-</span>}
+                        </td>
                       </tr>
                     );
                   })

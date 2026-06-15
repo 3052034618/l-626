@@ -16,6 +16,29 @@ export interface User {
   department?: string;
 }
 
+export interface TransferHistoryItem {
+  id: string;
+  fromEmployeeId: string;
+  fromEmployeeName: string;
+  fromDepartment: string;
+  toEmployeeId: string;
+  toEmployeeName: string;
+  toDepartment: string;
+  operatorId: string;
+  operatorName: string;
+  transferredAt: string;
+}
+
+export interface RescheduleHistoryItem {
+  id: string;
+  oldDate: string;
+  oldTime: string;
+  newDate: string;
+  newTime: string;
+  rescheduledAt: string;
+  rescheduledBy: string;
+}
+
 export interface Appointment {
   id: string;
   visitorName: string;
@@ -36,6 +59,11 @@ export interface Appointment {
   rejectReason?: string;
   autoApproved?: boolean;
   transferFrom?: string;
+  transferHistory?: TransferHistoryItem[];
+  rescheduleHistory?: RescheduleHistoryItem[];
+  originalEmployeeId?: string;
+  originalEmployeeName?: string;
+  cancelledAt?: string;
 }
 
 export interface BlacklistItem {
@@ -80,14 +108,21 @@ export interface VerifyResult {
   message: string;
   isBlacklisted?: boolean;
   isExpired?: boolean;
+  action?: 'check_in' | 'check_out';
 }
 
 export interface MonthlyReportData {
   totalAppointments: number;
   totalVisited: number;
   totalRejected: number;
+  totalAutoApproved: number;
+  totalExpired: number;
   averageApprovalTime: number;
-  byDepartment: { department: string; count: number }[];
-  byDay: { date: string; count: number }[];
+  byDepartment: { department: string; count: number; visited: number; rejected: number }[];
+  byEmployee: { employeeId: string; employeeName: string; department: string; count: number; visited: number; rejected: number }[];
+  byDay: { date: string; count: number; visited: number; rejected: number }[];
+  byRejectReason: { reason: string; count: number }[];
   topVisitors: { name: string; count: number }[];
+  appointments: Appointment[];
+  accessRecords: AccessRecord[];
 }

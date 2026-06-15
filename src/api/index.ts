@@ -51,6 +51,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ targetEmployeeId, operatorId }),
     }),
+  rescheduleAppointment: (id: string, appointmentDate: string, appointmentTime: string, operatorId?: string) =>
+    req<Appointment>(`/appointments/${id}/reschedule`, {
+      method: 'PUT',
+      body: JSON.stringify({ appointmentDate, appointmentTime, operatorId }),
+    }),
+  cancelAppointment: (id: string) =>
+    req<Appointment>(`/appointments/${id}/cancel`, { method: 'PUT' }),
   getTimeSlots: (date: string) => req<TimeSlot[]>(`/appointments/time-slots?date=${date}`),
 
   getUsers: (role?: UserRole) => req<User[]>(`/users${role ? `?role=${role}` : ''}`),
@@ -70,16 +77,25 @@ export const api = {
     const qs = Object.keys(cleanParams).length ? '?' + new URLSearchParams(cleanParams).toString() : '';
     return req<AccessRecord[]>('/access' + qs);
   },
+  getRejectReasons: () => req<string[]>('/access/reject-reasons'),
   createAccessRecord: (data: Partial<AccessRecord>) =>
     req<AccessRecord>('/access', { method: 'POST', body: JSON.stringify(data) }),
   verifyQr: (qrCode: string) => req<VerifyResult>(`/access/verify/${qrCode}`),
 
   getDashboardStats: () => req<DashboardStats>('/dashboard/stats'),
-  getMonthlyReport: (params: { month: string; department?: string; visitorName?: string }) => {
+  getMonthlyReport: (params: {
+    month: string;
+    department?: string;
+    visitorName?: string;
+    employeeId?: string;
+    rejectReason?: string;
+  }) => {
     const cleanParams: Record<string, string> = {};
     if (params.month) cleanParams.month = params.month;
     if (params.department) cleanParams.department = params.department;
     if (params.visitorName) cleanParams.visitorName = params.visitorName;
+    if (params.employeeId) cleanParams.employeeId = params.employeeId;
+    if (params.rejectReason) cleanParams.rejectReason = params.rejectReason;
     const qs = new URLSearchParams(cleanParams).toString();
     return req<MonthlyReportData>(`/dashboard/monthly?${qs}`);
   },
